@@ -1,0 +1,30 @@
+# Generated data
+data/generated/
+
+# PostgreSQL
+*.dump
+*.backup
+*.sql.gz
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
