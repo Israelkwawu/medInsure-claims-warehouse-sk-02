@@ -15,8 +15,6 @@ capstone project in the SK-02 SQL and Data Modeling Specialist track.
 | `sql/05_etl/`         | Dimension and fact load procedures            |
 | `sql/06_analytics/`   | Required analytical queries                   |
 | `sql/07_performance/` | Indexes, plans, and materialized views        |
-| `data/sample/`        | Small, versioned development fixtures         |
-| `data/generated/`     | Large generated data; ignored by Git          |
 | `scripts/`            | Data generation and database setup helpers    |
 | `tests/`              | Warehouse and data-quality checks             |
 
@@ -56,11 +54,52 @@ database, then run:
 ./scripts/setup.ps1
 ```
 
-The runner applies numbered `.sql` files from `sql/` in lexical order. This
-keeps dependency order explicit as the remaining deliverables are added.
+The runner applies numbered `.sql` files from `sql/` in lexical order.
+
+## Load The Warehouse
+
+`scripts/setup.ps1` applies every numbered SQL file under `sql/` in lexical
+order. That creates schemas, tables, views, and load procedures. It does not
+generate claims.
+
+`scripts/run_pipeline.ps1` applies that DDL, generates source data, reloads the
+warehouse, refreshes the monthly summary, and runs `tests/run_tests.ps1`.
+That script fails if a quality check is under 99%, an integrity assertion
+breaks, or an analytic view returns no rows. Re-run the tests alone, after a
+load, with `./tests/run_tests.ps1`.
+
+```powershell
+./scripts/run_pipeline.ps1 -Scale 0.05
+```
+
+`-Scale 1` builds the full spec volumes: 500,000 members, 15,000 providers,
+2,000,000 claims, and about 7,500,000 service lines. The default `0.05` keeps
+the same shape and the full diagnosis and procedure catalogs, with 5% of the
+member, provider, and claim volumes, so a local Docker database can finish
+the load. Reference data (8 plans, 12,000 diagnosis codes, 8,500 procedure
+codes) is always loaded in full.
+
+The generator plants a small number of source defects on purpose: unknown
+member ids, unknown provider ids, procedure code `ZZZZZ`, and eight claims
+whose provider network date is in the future. The fact load dead-letters the
+unknown keys. The data-quality script reports the rest.
+
+## Deliverables
+
+| Spec | Where |
+|---|---|
+| Dimensional model | `docs/data-model.md` |
+| ETL design | `docs/etl-design.md` |
+| DDL | `sql/03_dimensions/`, `sql/04_facts/` |
+| ETL, including SCD Type 2 | `sql/05_etl/` |
+| Eight analytic queries | `sql/06_analytics/` |
+| Indexes and monthly summary | `sql/07_performance/` |
+| Performance write-up | `docs/performance.md` |
+| Data-quality checks and results | `tests/data_quality.sql`, `docs/data-quality.md` |
 
 ## Status
 
-Project bootstrap is complete. The dimensional model, DDL, ETL, analytics,
-performance, and data-quality deliverables are built incrementally under the
-paths above.
+The dimensional model, ETL design, DDL, analytics, performance write-up,
+and data-quality report are in the paths above. `docs/performance.md` and
+`docs/data-quality.md` record the scale `0.05` load. Rerun `tests/explain.sql`
+and `tests/data_quality.sql` after a new load and refresh those two docs.
