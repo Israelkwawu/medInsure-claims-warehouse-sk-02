@@ -57,8 +57,10 @@ BEGIN
         RAISE EXCEPTION 'p_scale must be in the range (0, 1]';
     END IF;
 
+    -- Full scale can run longer than a client timeout. This limit is local to the procedure.
     SET LOCAL statement_timeout = 0;
 
+    -- Floors keep a tiny scale large enough for a second SCD version and the planted defects.
     v_members := GREATEST(500, round(500000 * p_scale)::integer);
     v_providers := GREATEST(50, round(15000 * p_scale)::integer);
     v_claims := GREATEST(2000, round(2000000 * p_scale)::integer);
@@ -144,6 +146,7 @@ BEGIN
         zip_code,
         enrollment_date,
         CASE
+            -- member_id is bigint. date + bigint is invalid, so the day offset is cast to integer.
             WHEN member_id % 2 = 0 THEN (enrollment_date + 200 + (member_id % 300)::integer) - 1
             ELSE NULL
         END
@@ -270,6 +273,7 @@ BEGIN
     WHERE h.provider_id = p.provider_id
       AND h.effective_end IS NULL;
 
+    -- Provider assignment is the only random draw. The seed makes that skew repeatable.
     PERFORM setseed(0.42);
 
     INSERT INTO source.claims (
@@ -295,7 +299,9 @@ BEGIN
             ELSE NULL
         END,
         drafted.service_date,
+        -- Cap keeps processed_date inside dim_date and on or after the service date.
         LEAST(drafted.service_date + (drafted.claim_id % 10)::integer, DATE '2026-10-06'),
+        -- Header money is filled from the lines after those lines exist.
         0,
         0,
         0
@@ -306,6 +312,8 @@ BEGIN
                 WHEN gs % 1000 = 0 THEN 0
                 ELSE 1 + ((gs * 13) % v_members)
             END AS member_id,
+            -- power(..., 3) skews claims onto low provider ids. v_providers - 1
+            -- keeps the random draw off Northstar, who is assigned explicitly below.
             CASE
                 WHEN gs % 1000 = 1 THEN 0
                 ELSE 1 + floor(power(random(), 3) * (v_providers - 1))::integer
@@ -314,6 +322,7 @@ BEGIN
                 (gs * 17) % GREATEST((DATE '2026-09-30' - anchor.enrollment_date), 1)
             ) AS service_date
         FROM generate_series(1, v_claims) AS gs
+        -- An unknown member still needs a real enrollment date to place the service date.
         JOIN source.members AS anchor
             ON anchor.member_id = CASE
                 WHEN gs % 1000 = 0 THEN 1
@@ -326,6 +335,8 @@ BEGIN
         claim_type, claim_status, denial_reason, service_date, processed_date,
         total_billed, total_allowed, total_paid
     )
+    -- Eight Northstar claims. Service date is 2024-06-01, before that provider's 2030 network date.
+    -- Member ids are 1..8, which exist at every scale.
     SELECT
         v_claims + gs,
         gs,
@@ -346,6 +357,7 @@ BEGIN
         service_date, units, billed_amount, allowed_amount, paid_amount
     )
     SELECT
+        -- line_number is 1..4, so claim_id * 10 + line_number cannot collide.
         c.claim_id * 10 + gs.line_number,
         c.claim_id,
         gs.line_number::smallint,
@@ -363,6 +375,7 @@ BEGIN
             ELSE round(amounts.allowed * 0.85, 2)
         END
     FROM source.claims AS c
+    -- Three lines when claim_id % 4 = 0, otherwise four. That averages 3.75 lines per claim.
     JOIN generate_series(1, 4) AS gs(line_number)
         ON gs.line_number <= CASE WHEN c.claim_id % 4 = 0 THEN 3 ELSE 4 END
     CROSS JOIN LATERAL (

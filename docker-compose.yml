@@ -3,8 +3,13 @@ services:
     image: postgres:16
     container_name: medinsure-postgres
     restart: unless-stopped
-    env_file:
-      - .env
+    # Pass only the server settings. PGPORT in .env is the host port for clients.
+    # If it were injected here, Postgres would listen on that port inside the container
+    # while Compose still forwards to 5432.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-medinsure}
+      POSTGRES_USER: ${POSTGRES_USER:-medinsure}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medinsure_dev}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:

@@ -1,7 +1,10 @@
 # SK-02 MedInsure Claims Data Warehouse
 
-PostgreSQL dimensional warehouse for the MedInsure healthcare claims
+PostgreSQL Kimball star schema for the MedInsure healthcare claims
 capstone project in the SK-02 SQL and Data Modeling Specialist track.
+`source`, `staging`, `warehouse`, and `audit` are the load path around
+that star, not bronze, silver, and gold layers. The model is written up
+in `docs/data-model.md`.
 
 ## Project Structure
 

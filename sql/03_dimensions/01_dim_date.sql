@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS warehouse.dim_date (
     year_month VARCHAR(7) NOT NULL
 );
 
+-- Unique indexes treat nulls as distinct, so the Not Applicable row's null calendar_date is allowed.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dim_date_calendar_date
     ON warehouse.dim_date (calendar_date);
 

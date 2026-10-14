@@ -47,6 +47,7 @@ BEGIN
             ELSE NULL
         END
     FROM source.claims AS c
+    -- Exclude key -1. That row spans 1900-9999, so it would otherwise match a missing id.
     LEFT JOIN warehouse.dim_member AS dm
         ON dm.member_id = c.member_id
        AND dm.member_key <> -1
@@ -82,6 +83,7 @@ BEGIN
             )
         );
 
+    -- Replace any earlier reject for these claim ids so a retry does not stack rows.
     DELETE FROM audit.etl_dead_letter AS prior
     USING staging.claim_load_batch AS batch
     WHERE prior.pipeline_name = 'fact_claim'
@@ -115,6 +117,7 @@ BEGIN
         total_billed,
         total_allowed,
         total_paid,
+        -- Floor at zero so an overpaid claim still loads. The 5% quality check is what reports it.
         CASE
             WHEN claim_status = 'Denied' THEN 0
             ELSE GREATEST(total_allowed - total_paid, 0)
@@ -134,6 +137,7 @@ BEGIN
         VALUES ('fact_claim', v_max_date, v_inserted, now())
         ON CONFLICT (pipeline_name) DO UPDATE
         SET
+            -- A retried old claim must not pull the mark backward.
             high_water_mark = GREATEST(audit.etl_watermark.high_water_mark, EXCLUDED.high_water_mark),
             rows_loaded = audit.etl_watermark.rows_loaded + EXCLUDED.rows_loaded,
             updated_at = now();

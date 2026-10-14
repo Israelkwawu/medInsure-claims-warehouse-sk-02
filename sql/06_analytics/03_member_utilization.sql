@@ -11,6 +11,7 @@ WITH months AS (
         MIN(calendar_date) AS month_start,
         MAX(calendar_date) AS month_end
     FROM warehouse.dim_date
+    -- Through 2026-09-30, the latest service month the generator writes.
     WHERE calendar_date BETWEEN DATE '2020-01-01' AND DATE '2026-09-30'
     GROUP BY year_month
 ),
@@ -26,6 +27,7 @@ enrolled AS (
        AND dm.effective_end >= months.month_start
     JOIN warehouse.dim_plan AS pl
         ON pl.plan_key = dm.plan_key
+    -- One row per member per month, so two versions that touch the same month are not counted twice.
     GROUP BY months.year_month, pl.plan_type, dm.member_id
 ),
 enrolled_counts AS (

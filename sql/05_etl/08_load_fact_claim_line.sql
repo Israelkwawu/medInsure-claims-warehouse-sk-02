@@ -47,6 +47,7 @@ BEGIN
 
     GET DIAGNOSTICS v_inserted = ROW_COUNT;
 
+    -- Lines have no processed_date, so they record the header watermark they were loaded with.
     SELECT high_water_mark
     INTO v_hwm
     FROM audit.etl_watermark

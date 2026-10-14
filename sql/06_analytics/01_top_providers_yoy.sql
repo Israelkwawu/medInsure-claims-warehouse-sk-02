@@ -46,6 +46,7 @@ latest_year AS (
         with_lag.specialty,
         with_lag.year_number,
         with_lag.total_paid,
+        -- LAG can land on a gap year. Only the immediately previous year counts as YoY.
         CASE
             WHEN with_lag.prior_year_number = with_lag.year_number - 1 THEN with_lag.prior_year_paid
         END AS prior_year_paid

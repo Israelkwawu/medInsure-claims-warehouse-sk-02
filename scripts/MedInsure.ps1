@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+# This file lives in scripts/. Callers in tests/ still resolve the repo from here, not from their own folder.
 $script:RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Initialize-MedInsureEnvironment {

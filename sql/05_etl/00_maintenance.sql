@@ -4,6 +4,7 @@ CREATE OR REPLACE PROCEDURE warehouse.seed_unknown_rows()
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    -- Plan is inserted before member because dim_member.plan_key references dim_plan.
     INSERT INTO warehouse.dim_plan (
         plan_key, plan_id, plan_code, plan_name, plan_type, deductible, oop_max, coinsurance_pct
     )

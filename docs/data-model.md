@@ -1,6 +1,8 @@
 # Data model
 
-MedInsure’s claims warehouse is a star schema in the `warehouse` schema. The OLTP-shaped tables stay in `source`. `staging` holds the versioned history and the claim batch the load is about to accept or reject. `audit` holds watermarks and rejected claims.
+MedInsure’s claims warehouse is a Kimball star schema in the `warehouse` schema. Facts hold the claim events. Dimensions hold the descriptive context, with Type 2 history on member and provider. The OLTP-shaped tables stay in `source`. `staging` holds the versioned history and the claim batch the load is about to accept or reject. `audit` holds watermarks and rejected claims.
+
+Those four schemas are the load path for that star. They are not a medallion layout: there are no bronze, silver, or gold layers.
 
 DDL for this model is in `sql/03_dimensions/` and `sql/04_facts/`.
 

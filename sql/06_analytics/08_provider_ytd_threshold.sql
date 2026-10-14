@@ -39,6 +39,7 @@ SELECT
     running.provider_name,
     running.year_number,
     MAX(running.ytd_paid) AS ytd_paid,
+    -- The crossing day is the first day the running total reaches $1M. Later days stay above it.
     MIN(running.calendar_date) FILTER (
         WHERE running.ytd_paid >= 1000000
           AND running.ytd_paid - running.paid_on_day < 1000000

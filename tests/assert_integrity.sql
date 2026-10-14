@@ -7,6 +7,7 @@ CREATE TEMP TABLE test_failures (
 
 INSERT INTO test_failures (test_name, detail)
 SELECT
+    -- 2020-01-01 through 2030-12-31 is 4018 days: 11 years plus leap days in 2020, 2024, and 2028.
     'dim_date covers 2020-2030',
     'expected 4018 calendar days, found ' || COUNT(*)::text
 FROM warehouse.dim_date
@@ -216,6 +217,7 @@ FROM (
         ROW_NUMBER() OVER (ORDER BY year_month) AS month_number
     FROM warehouse.q06_monthly_volume
 ) AS moving
+-- The first two months have a shorter window, so only a full three-month span is compared.
 WHERE month_number >= 3
   AND claim_count_3_month_avg IS DISTINCT FROM expected_avg
 HAVING COUNT(*) > 0;
