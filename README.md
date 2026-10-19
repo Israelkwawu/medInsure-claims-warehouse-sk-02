@@ -87,6 +87,35 @@ member ids, unknown provider ids, procedure code `ZZZZZ`, and eight claims
 whose provider network date is in the future. The fact load dead-letters the
 unknown keys. The data-quality script reports the rest.
 
+Running the pipeline again rebuilds that same population. It truncates the
+source tables, calls `warehouse.reset_warehouse_data()` to clear the facts,
+dimensions, dead-letter rows, and watermark, then loads from scratch.
+
+To drop the database and start from an empty server:
+
+```powershell
+docker compose down -v
+docker compose up -d
+./scripts/run_pipeline.ps1 -Scale 0.05
+```
+
+`-v` deletes the Postgres volume. Leave the pipeline running until it prints
+`Warehouse tests passed.`
+
+If PowerShell refuses the script because it is not digitally signed, the
+machine policy is `AllSigned`. Allow local scripts for your user:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Open a new terminal afterward. A script downloaded from the internet still
+has to be signed. For one run, without changing the policy:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -Scale 0.05
+```
+
 ## Deliverables
 
 | Spec | Where |
