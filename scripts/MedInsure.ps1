@@ -2,6 +2,88 @@ $ErrorActionPreference = 'Stop'
 # This file lives in scripts/. Callers in tests/ still resolve the repo from here, not from their own folder.
 $script:RepoRoot = Split-Path -Parent $PSScriptRoot
 
+function Write-MedInsureLog {
+    param(
+        [string]$Level = 'INFO',
+        [AllowEmptyString()][string]$Message
+    )
+
+    if (-not $script:MedInsureLog -or [string]::IsNullOrWhiteSpace($Message)) {
+        return
+    }
+
+    $line = '{0:yyyy-MM-dd HH:mm:ss} {1,-5} {2}' -f (Get-Date), $Level, $Message
+    Add-Content -LiteralPath $script:MedInsureLog -Value $line -Encoding utf8
+}
+
+function Start-MedInsureLog {
+    if ($script:MedInsureLog) {
+        return
+    }
+
+    Initialize-MedInsureEnvironment
+    $logDir = Join-Path $script:RepoRoot 'logs'
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    $script:MedInsureLog = Join-Path $logDir ('pipeline-{0:yyyyMMdd-HHmmss}.log' -f (Get-Date))
+    Write-MedInsureHost "Logging to $($script:MedInsureLog)"
+    Write-MedInsureLog -Message "repo $($script:RepoRoot)"
+    Write-MedInsureLog -Message "database $($env:PGDATABASE) on $($env:PGHOST):$($env:PGPORT) user $($env:PGUSER)"
+}
+
+function Write-MedInsureHost {
+    param([Parameter(ValueFromPipeline = $true)][AllowNull()][object]$Message)
+
+    process {
+        if ($null -eq $Message) {
+            return
+        }
+
+        $text = $Message.ToString()
+        Write-Host $text
+        Write-MedInsureLog -Message $text
+    }
+}
+
+function Invoke-MedInsureNative {
+    param([Parameter(Mandatory = $true)][scriptblock]$Command)
+
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $Command 2>&1
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+
+    foreach ($item in @($output)) {
+        if ($null -eq $item) {
+            continue
+        }
+
+        $text = $item.ToString()
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            continue
+        }
+
+        Write-Host $text
+        $level = 'INFO'
+        if ($text -match '(^|\s)(ERROR|FATAL):') {
+            $level = 'ERROR'
+        }
+        elseif ($text -match '(^|\s)WARNING:') {
+            $level = 'WARN'
+        }
+        Write-MedInsureLog -Level $level -Message $text
+    }
+
+    return $code
+}
+
 function Initialize-MedInsureEnvironment {
     if (-not $script:RepoRoot) {
         $script:RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -53,8 +135,8 @@ function Get-MedInsureContainerPath {
 function Start-MedInsureDatabase {
     Initialize-MedInsureEnvironment
     if (Test-MedInsureDocker) {
-        & docker compose --project-directory $script:RepoRoot up -d
-        if ($LASTEXITCODE -ne 0) {
+        $code = Invoke-MedInsureNative { & docker compose --project-directory $script:RepoRoot up -d }
+        if ($code -ne 0) {
             throw 'docker compose up failed.'
         }
 
@@ -69,6 +151,7 @@ function Start-MedInsureDatabase {
         }
 
         if (-not $ready) {
+            Write-MedInsureLog -Level 'ERROR' -Message 'PostgreSQL did not become ready after 30 attempts.'
             throw 'PostgreSQL did not become ready.'
         }
         return
@@ -86,34 +169,43 @@ function Invoke-MedInsureSql {
     )
 
     Initialize-MedInsureEnvironment
+    Start-MedInsureLog
+    $started = Get-Date
+    $target = if ($File) { $File } else { $Sql }
+    Write-MedInsureLog -Message "begin $target"
+
     if (Test-MedInsureDocker) {
         if ($File) {
             $containerPath = Get-MedInsureContainerPath -FullPath (Resolve-Path $File).Path
-            & docker compose --project-directory $script:RepoRoot exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -v ON_ERROR_STOP=1 -f $containerPath
+            $code = Invoke-MedInsureNative {
+                & docker compose --project-directory $script:RepoRoot exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -v ON_ERROR_STOP=1 -f $containerPath
+            }
         }
         else {
-            & docker compose --project-directory $script:RepoRoot exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -v ON_ERROR_STOP=1 -c $Sql
+            $code = Invoke-MedInsureNative {
+                & docker compose --project-directory $script:RepoRoot exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -v ON_ERROR_STOP=1 -c $Sql
+            }
         }
-
-        if ($LASTEXITCODE -ne 0) {
-            throw 'psql failed.'
-        }
-        return
     }
-
-    if ($File) {
-        & psql --set ON_ERROR_STOP=1 --file $File
+    elseif ($File) {
+        $code = Invoke-MedInsureNative { & psql --set ON_ERROR_STOP=1 --file $File }
     }
     else {
-        & psql --set ON_ERROR_STOP=1 --command $Sql
+        $code = Invoke-MedInsureNative { & psql --set ON_ERROR_STOP=1 --command $Sql }
     }
 
-    if ($LASTEXITCODE -ne 0) {
-        throw 'psql failed.'
+    $elapsed = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+    if ($code -ne 0) {
+        $failure = "psql exit $code after ${elapsed}s: $target"
+        Write-MedInsureLog -Level 'ERROR' -Message $failure
+        throw $failure
     }
+
+    Write-MedInsureLog -Message "end exit 0 in ${elapsed}s: $target"
 }
 
 function Invoke-MedInsureSetup {
+    Start-MedInsureLog
     Start-MedInsureDatabase
     $sqlRoot = Join-Path $script:RepoRoot 'sql'
     $files = Get-ChildItem -Path $sqlRoot -Filter '*.sql' -File -Recurse | Sort-Object FullName
@@ -122,9 +214,9 @@ function Invoke-MedInsureSetup {
     }
 
     foreach ($file in $files) {
-        Write-Host "Applying $($file.FullName)"
+        Write-MedInsureHost "Applying $($file.FullName)"
         Invoke-MedInsureSql -File $file.FullName
     }
 
-    Write-Host 'Database setup completed.'
+    Write-MedInsureHost 'Database setup completed.'
 }

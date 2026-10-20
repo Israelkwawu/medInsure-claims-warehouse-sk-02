@@ -8,10 +8,12 @@ $tests = @(
     'analytics_smoke.sql'
 )
 
+Start-MedInsureLog
+
 foreach ($name in $tests) {
     $path = Join-Path $PSScriptRoot $name
-    Write-Host "Running $name"
+    Write-MedInsureHost "Running $name"
     Invoke-MedInsureSql -File $path
 }
 
-Write-Host 'Warehouse tests passed.'
+Write-MedInsureHost 'Warehouse tests passed.'

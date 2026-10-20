@@ -87,6 +87,12 @@ member ids, unknown provider ids, procedure code `ZZZZZ`, and eight claims
 whose provider network date is in the future. The fact load dead-letters the
 unknown keys. The data-quality script reports the rest.
 
+Each run writes `logs/pipeline-YYYYMMDD-HHMMSS.log`, which Git ignores. The
+terminal still shows the same `CREATE` and `NOTICE` text. The log adds a
+timestamp on every line, the database host and port, and for each SQL step
+the file or statement, the exit code, and how long it took. A failed step is
+marked `ERROR`, including the PostgreSQL message and the PowerShell stack.
+
 Running the pipeline again rebuilds that same population. It truncates the
 source tables, calls `warehouse.reset_warehouse_data()` to clear the facts,
 dimensions, dead-letter rows, and watermark, then loads from scratch.
