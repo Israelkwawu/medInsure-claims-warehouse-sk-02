@@ -158,8 +158,8 @@ Plans, diagnoses, procedures, and the calendar load straight into their dimensio
 | `claim_lines.diagnosis_code` | `diagnosis_key` | Match `dim_diagnosis`, or `-1`. |
 | Line amounts and units | `billed_amount`, `allowed_amount`, `paid_amount`, `units` | Measures at line grain. |
 | `claim_lines.service_date` | `fact_claim_line.service_date_key` | Looked up on `dim_date` from the line's service date. |
-| Rejected `claim_id` | `audit.etl_dead_letter.source_key` | Not inserted into `fact_claim`. Retried on the next run. |
-| Highest `processed_date` loaded | `audit.etl_watermark.high_water_mark` | The next run re-reads that boundary date. |
+| Rejected `claim_id` | `audit.etl_dead_letter.source_key` | Not inserted into `fact_claim`. Each of its lines is written to the same log. Retried on the next run. |
+| Highest `processed_date` loaded | `audit.etl_watermark.high_water_mark` | Progress mark only. A claim not yet on the fact is still loaded or rejected. |
 
 ## How a claim picks its keys
 

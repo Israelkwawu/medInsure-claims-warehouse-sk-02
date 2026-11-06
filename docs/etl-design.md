@@ -34,7 +34,7 @@ After the loop, the procedure raises if any natural key has more than one `is_cu
 
 ## fact_claim
 
-The high-water mark is `processed_date`, stored in `audit.etl_watermark`. The next run reads `processed_date >= watermark` so a claim that lands late on the boundary date is still seen. `claim_id` is unique, so a claim already on the fact is skipped. Claim ids still sitting in `audit.etl_dead_letter` are retried even when their processed date is older than the watermark.
+The high-water mark is `processed_date`, stored in `audit.etl_watermark`. It records the latest processed date the load has seen. It does not decide which claims are read. Every source claim that is not already on `fact_claim` is a candidate, including one whose processed date is older than the mark. Using the mark as a filter would leave that claim out of the fact and out of the dead-letter log. `claim_id` is unique, so a claim already on the fact is skipped.
 
 For each candidate claim the load left-joins:
 
@@ -51,9 +51,23 @@ On the scale `0.05` load this inserted 99,808 claims and rejected 200 (unknown m
 
 ## fact_claim_line
 
-This runs only after the header load. `claim_key`, `member_key`, and `provider_key` come from `fact_claim` matched on the degenerate `claim_id`. Lines whose header was dead-lettered have nothing to join and stay out of the fact. An unknown procedure or diagnosis code uses key `-1`. The source procedure code is kept on the line for the orphan check.
+This runs only after the header load. `claim_key`, `member_key`, and `provider_key` come from `fact_claim` matched on the degenerate `claim_id`. A line that cannot be placed is written to `audit.etl_dead_letter` and the procedure continues. The reason is the header's reject reason, `header not loaded`, or `service date not in dim_date`. An unknown procedure or diagnosis code uses key `-1` and the line still loads. The source procedure code is kept on the line for the orphan check.
 
-The same load inserted 374,330 lines. The 700 lines that belonged to the 200 rejected claims were not loaded.
+The same load inserted 374,330 lines. The 700 lines that belonged to the 200 rejected claims were written to the dead-letter log with the header's reason.
+
+## Where every source row goes
+
+`audit.source_balance` counts each source table into named outcomes. `tests/row_balance.sql` fails the pipeline when any count is `unaccounted` or `conflict`, when a warehouse row has no source parent, or when the buckets do not add back to the source count.
+
+| Outcome | Meaning |
+|---|---|
+| `loaded` | The row is on its dimension or fact. A history row opened one SCD version. |
+| `rejected` | The row is in `audit.etl_dead_letter` with a reason. A service line of a rejected claim is written here, not dropped. |
+| `held_with_header` | A service line whose header was rejected and that has no line of its own in the dead-letter log. The line load writes that row, so this bucket is empty after a completed load. |
+| `collapsed` | A history row did not open a version because the tracked attributes already matched the covering version. |
+| `unaccounted` | None of the above. This count is a failed load. |
+
+Drill to the rows from `audit.claim_disposition`, `audit.claim_line_disposition`, `audit.member_history_disposition`, or `audit.provider_history_disposition`. The Not Applicable key `-1` is a warehouse placeholder and is not a source row.
 
 ## Defects the generator leaves in the source
 

@@ -4,6 +4,7 @@
 
 $tests = @(
     'data_quality.sql',
+    'row_balance.sql',
     'assert_integrity.sql',
     'analytics_smoke.sql'
 )

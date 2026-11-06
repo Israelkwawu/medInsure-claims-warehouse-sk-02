@@ -1,21 +1,17 @@
--- Incremental header load. The high-water mark is processed_date.
--- The boundary date is re-read so a claim that arrives late on that date is
--- still considered; claim_id uniqueness keeps the reload idempotent.
--- A claim with no member or provider version is written to the dead-letter
--- log and skipped. The rest of the batch still loads.
+-- Incremental header load. A claim already on fact_claim is skipped, so a
+-- second run does not duplicate it. Every other source claim is in this batch:
+-- the processed_date watermark records how far the load has seen, and it is
+-- not used as a filter. A backdated claim that arrives after the mark has
+-- moved would otherwise disappear with no disposition.
+-- A claim with no member, provider, or calendar row is written to the
+-- dead-letter log. The rest of the batch still loads.
 CREATE OR REPLACE PROCEDURE warehouse.load_fact_claim()
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_hwm date;
     v_max_date date;
     v_inserted bigint;
 BEGIN
-    SELECT high_water_mark
-    INTO v_hwm
-    FROM audit.etl_watermark
-    WHERE pipeline_name = 'fact_claim';
-
     TRUNCATE TABLE staging.claim_load_batch;
 
     INSERT INTO staging.claim_load_batch (
@@ -72,15 +68,6 @@ BEGIN
             SELECT 1
             FROM warehouse.fact_claim AS existing
             WHERE existing.claim_id = c.claim_id
-        )
-      AND (
-            c.processed_date >= COALESCE(v_hwm, DATE '1900-01-01')
-            OR EXISTS (
-                SELECT 1
-                FROM audit.etl_dead_letter AS prior
-                WHERE prior.pipeline_name = 'fact_claim'
-                  AND prior.source_key = c.claim_id::text
-            )
         );
 
     -- Replace any earlier reject for these claim ids so a retry does not stack rows.

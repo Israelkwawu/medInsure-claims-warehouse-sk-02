@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS audit.etl_watermark (
 );
 
 COMMENT ON TABLE audit.etl_watermark IS
-    'Highest processed_date already considered by a fact pipeline. The next run re-reads the boundary date so late arrivals on that date are not skipped.';
+    'Latest processed_date considered by a fact pipeline. The mark records progress. It does not exclude a claim that has never been loaded or rejected.';
 
 CREATE TABLE IF NOT EXISTS audit.etl_dead_letter (
     dead_letter_id BIGSERIAL PRIMARY KEY,
@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_etl_dead_letter_pipeline_key
     ON audit.etl_dead_letter (pipeline_name, source_key);
 
 COMMENT ON TABLE audit.etl_dead_letter IS
-    'Claims that cannot be placed on a member or provider version. The fact load continues; these rows are retried on the next run.';
+    'Source rows the fact load could not place. The load writes the row here and continues. fact_claim: no member, provider, or calendar row. fact_claim_line: the header was rejected, the header is missing, or the service date is not on the calendar. Unknown diagnosis and procedure codes are not rejected; the line loads with key -1. Retried on the next run.';
 
 -- Records the generator scale so quality and performance write-ups can cite the population they measured.
 CREATE TABLE IF NOT EXISTS audit.load_profile (

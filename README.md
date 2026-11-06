@@ -67,7 +67,11 @@ generate claims.
 
 `scripts/run_pipeline.ps1` applies that DDL, generates source data, reloads the
 warehouse, refreshes the monthly summary, and runs `tests/run_tests.ps1`.
-That script fails if a quality check is under 99%, an integrity assertion
+Bad source rows do not stop that load. A claim with no member, provider, or
+calendar row is written to `audit.etl_dead_letter`, and its service lines are
+written there with the header's reason. Unknown diagnosis and procedure codes
+load with key `-1`. The quality script prints PASS or FAIL at 99% and continues.
+The run still stops when the ledger does not add up, an integrity assertion
 breaks, or an analytic view returns no rows. Re-run the tests alone, after a
 load, with `./tests/run_tests.ps1`.
 
@@ -84,8 +88,16 @@ codes) is always loaded in full.
 
 The generator plants a small number of source defects on purpose: unknown
 member ids, unknown provider ids, procedure code `ZZZZZ`, and eight claims
-whose provider network date is in the future. The fact load dead-letters the
-unknown keys. The data-quality script reports the rest.
+whose provider network date is in the future. The fact load writes the unknown
+keys, and the service lines on those claims, to `audit.etl_dead_letter`.
+Procedure code `ZZZZZ` loads with procedure key `-1`. The eight early network
+dates load, and the data-quality script reports them. Neither case stops the run.
+
+`audit.source_balance` is the ledger for every source table: loaded, rejected,
+held, or collapsed. `tests/row_balance.sql` fails the run when a source row
+has no outcome, a row is both loaded and rejected, or a warehouse row has no
+source parent. The Not Applicable key `-1` is the one warehouse row that does
+not come from source.
 
 Each run writes `logs/pipeline-YYYYMMDD-HHMMSS.log`, which Git ignores. The
 terminal still shows the same `CREATE` and `NOTICE` text. The log adds a

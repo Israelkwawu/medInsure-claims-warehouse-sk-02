@@ -17,6 +17,8 @@ The two failing counts are the defects the generator plants so the checks are ob
 - 26 lines carry procedure code `ZZZZZ`, which is not in `dim_procedure`. They load with `procedure_key = -1` and remain visible through `source_procedure_code`.
 - 8 claims are on Northstar Family Medicine, whose `network_effective_date` is 2030-01-01, with a service date of 2024-06-01. They are inside the provider’s SCD version, so they belong on the fact, and the anachronism check flags them.
 
-200 source claims never reached `fact_claim`: 100 with an unknown member and 100 with an unknown provider. They are in `audit.etl_dead_letter`. The key check above is over claims that did load, and every one of those resolves to a real date, member, and provider key.
+200 source claims never reached `fact_claim`: 100 with an unknown member and 100 with an unknown provider. They are in `audit.etl_dead_letter`, and the 700 service lines on those claims are written there with the header's reason. The load does not stop. The key check above is over claims that did load, and every one of those resolves to a real date, member, and provider key.
+
+`tests/row_balance.sql` is separate from the 99% threshold. It fails if any source row is unaccounted, if a row is both loaded and rejected, or if the named buckets do not add back to the source count.
 
 Member and provider current-row counts are one open version per natural key, which matches the partial unique indexes and the SCD checks in the load procedures. Every line `claim_id` is on the header. No loaded claim pays more than allowed plus 5%.

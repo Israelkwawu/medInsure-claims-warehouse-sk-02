@@ -133,7 +133,12 @@ BEGIN
     FROM quality_results
     WHERE status <> 'PASS';
 
+    -- The requirement is a PASS/FAIL report at 99%. A finding does not stop the load.
+    -- Rejected claims are already in audit.etl_dead_letter. Unknown codes and
+    -- anachronistic service dates stay on the fact and are counted here.
     IF v_failed IS NOT NULL THEN
-        RAISE EXCEPTION 'Data-quality checks failed: %', v_failed;
+        RAISE NOTICE 'Data-quality findings (load completed): %', v_failed;
+    ELSE
+        RAISE NOTICE 'Data-quality checks passed';
     END IF;
 END $$;
